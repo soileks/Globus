@@ -37,6 +37,6 @@ public class User {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    private Collection<String> roles = Collections.singleton("ROLE_USER");
+//    @ElementCollection(fetch = FetchType.EAGER)
+//    private Collection<String> roles = Collections.singleton("ROLE_USER");
 }
