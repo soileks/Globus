@@ -1,28 +1,28 @@
 
 services:
-  postgres:
-    image: postgres:13
-    environment:
+  postgres: # Имя сервиса (используется как hostname в сети Docker)
+    image: postgres:13 # Официальный образ PostgreSQL версии 13
+    environment: # Переменные окружения для настройки PostgreSQL
       POSTGRES_PASSWORD: password
       POSTGRES_USER: user
       POSTGRES_DB: bank_db
     ports:
       - "5432:5432"
-    volumes:
+    volumes: # Постоянное хранилище данных
       - postgres_data:/var/lib/postgresql/data
 
   user-service:
-    build: .
+    build: .    # Собирает образ из Dockerfile в текущей директории
     ports:
       - "8080:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bank_db
       SPRING_DATASOURCE_USERNAME: user
       SPRING_DATASOURCE_PASSWORD: password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      APP_JWT_SECRET: very-secure-secret-key
-    depends_on:
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update # Автообновление схемы БД
+      APP_JWT_SECRET: very-secure-secret-key # Ключ для JWT
+    depends_on:  # Зависимости между сервисами
       - postgres
 
 volumes:
-  postgres_data:
+  postgres_data:   # Объявляет именованный том для хранения данных PostgreSQL

@@ -1,15 +1,13 @@
 package com.bank.userservice.model;
 
+import com.bank.userservice.dto.UserResponseDto;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-
 import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.Collections;
 
 @Entity
 @Table(name = "users")
@@ -24,11 +22,14 @@ public class User {
     @Column(nullable = false, unique = true)
     private String username;
 
+    @Column(nullable = false, unique = true)
+    private String email;
+
     @Column(nullable = false)
     private String password;
 
-    @Column(nullable = false)
-    private boolean active = true;
+    //@Column(nullable = false)
+    //private boolean active = true;
 
     @CreationTimestamp
     @Column(updatable = false)
@@ -37,6 +38,13 @@ public class User {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-//    @ElementCollection(fetch = FetchType.EAGER)
-//    private Collection<String> roles = Collections.singleton("ROLE_USER");
+    public UserResponseDto toDto() {
+        return new UserResponseDto(
+                this.id,
+                this.username,
+                this.email,
+                this.createdAt
+        );
+    }
+
 }

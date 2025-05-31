@@ -1,6 +1,6 @@
 package com.bank.userservice.config;
 
-import com.bank.userservice.security.JwtAuthenticationFilter;
+//import com.bank.userservice.security.JwtAuthenticationFilter;
 import com.bank.userservice.security.JwtAuthorizationFilter;
 import com.bank.userservice.security.JwtUtils;
 import com.bank.userservice.service.UserDetailsServiceImpl;
@@ -18,7 +18,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-
 
 @Configuration
 @EnableWebSecurity
@@ -55,7 +54,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilter(new JwtAuthenticationFilter(authManager, jwtUtils))
+                //.addFilter(new JwtAuthenticationFilter(authManager, jwtUtils))
                 .addFilter(new JwtAuthorizationFilter(authManager, jwtUtils))
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)

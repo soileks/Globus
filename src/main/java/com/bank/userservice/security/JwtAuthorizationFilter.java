@@ -35,7 +35,6 @@ public class JwtAuthorizationFilter extends BasicAuthenticationFilter {
             chain.doFilter(request, response);
             return;
         }
-
         String token = header.replace(TOKEN_PREFIX, "");
 
         if (jwtUtils.validateJwtToken(token)) {
@@ -43,7 +42,6 @@ public class JwtAuthorizationFilter extends BasicAuthenticationFilter {
                     jwtUtils.getAuthentication(token);
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
-
         chain.doFilter(request, response);
     }
 }
