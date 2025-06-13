@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Globus Bank</title>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .tab {
+            display: none;
+        }
+        .active {
+            display: block;
+        }
+        .error {
+            color: red;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<h1>Добро пожаловать в Globus Bank</h1>
+
+<div class="tabs">
+    <button onclick="openTab('login')">Вход</button>
+    <button onclick="openTab('register')">Регистрация</button>
+</div>
+
+<!-- Форма входа -->
+<div id="login" class="tab">
+    <div class="form-container">
+        <h2>Вход в систему</h2>
+        <div class="form-group">
+            <label for="login-username">Логин или Email:</label>
+            <input type="text" id="login-username" required>
+        </div>
+        <div class="form-group">
+            <label for="login-password">Пароль:</label>
+            <input type="password" id="login-password" required>
+        </div>
+        <button onclick="login()">Войти</button>
+        <div id="login-error" class="error"></div>
+    </div>
+</div>
+
+<div id="register" class="tab">
+    <div class="form-container">
+        <h2>Регистрация</h2>
+        <div class="form-group">
+            <label for="reg-username">Логин:</label>
+            <input type="text" id="reg-username" required>
+        </div>
+        <div class="form-group">
+            <label for="reg-email">Email:</label>
+            <input type="email" id="reg-email" required>
+        </div>
+        <div class="form-group">
+            <label for="reg-password">Пароль:</label>
+            <input type="password" id="reg-password" required>
+        </div>
+        <!-- Добавляем виджет reCAPTCHA v2 -->
+        <div class="g-recaptcha" id="recaptcha-container" data-sitekey="6LfKY1ErAAAAAKB60ABxKnwLSd8NU1fQhUjDfyP_"></div>
+
+        <div id="math-captcha" style="display: none;">
+            <p>Решите простую задачу: <span id="math-problem"></span></p>
+            <input type="text" id="math-answer" placeholder="Ваш ответ">
+        </div>
+        <br>
+        <button onclick="register()">Зарегистрироваться</button>
+        <div id="register-error" class="error"></div>
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
