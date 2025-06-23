@@ -2,177 +2,186 @@ import com.bank.userservice.controller.AuthController;
 import com.bank.userservice.dto.LoginDto;
 import com.bank.userservice.dto.RegistrationDto;
 import com.bank.userservice.dto.UserResponseDto;
-import com.bank.userservice.dto.auth.AuthRequestDto;
 import com.bank.userservice.dto.auth.AuthResponseDto;
+
 import com.bank.userservice.dto.auth.RequestContext;
 
-import com.bank.userservice.model.Log.ApplicationLog;
-import com.bank.userservice.repository.Log.ApplicationLogRepository;
 import com.bank.userservice.service.AuthService;
-import com.bank.userservice.service.IntegrationLogService;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import jakarta.mail.MessagingException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-
 import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-
+/**
+ * Тестовый класс для {@link AuthController}.
+ *
+ * <p>Проверяет:
+ * <ul>
+ *   <li>Корректность обработки запросов регистрации и входа</li>
+ *   <li>Правильность управления контекстом (MDC и RequestContext)</li>
+ *   <li>Обработку ошибок сервисного слоя</li>
+ * </ul>
+ */
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
-
     @Mock
     private AuthService authService;
-
-    @Mock
-    private ApplicationLogRepository applicationLogRepository;
-
-    @Mock
-    private IntegrationLogService integrationLogService;
-
     @Mock
     private RequestContext requestContext;
 
     @InjectMocks
     private AuthController authController;
 
+    /** Тестовый идентификатор запроса */
+    private final String testRqid = "test-rqid-123";
+    /** Тестовый email пользователя */
+    private final String testEmail = "testuser@example.com";
+    /** Тестовое имя пользователя */
+    private final String testUsername = "testuser";
+
+    /**
+     * Очистка MDC после каждого теста.
+     */
+    @AfterEach
+    void tearDown() {
+        MDC.clear();
+    }
+    /**
+     * Проверяет успешную регистрацию пользователя.
+     *
+     * <p>Тест проверяет:
+     * <ul>
+     *   <li>Корректность HTTP статуса ответа (200 OK)</li>
+     *   <li>Правильность заполнения контекста запроса</li>
+     *   <li>Очистку MDC после выполнения</li>
+     *   <li>Содержимое успешного ответа</li>
+     * </ul>
+     */
     @Test
-    void register_ValidInput_ReturnsOk() {
-        // 1. Подготовка тестовых данных
-        AuthRequestDto requestDto = new AuthRequestDto();
-        requestDto.setRqid(1L);
-        requestDto.setRegistrationData(createValidRegistrationDto());
+    void register_ValidInput_ReturnsOk() throws JsonProcessingException, MessagingException {
+        // 1. Подготовка
+        RegistrationDto requestDto = createValidRegistrationDto();
+        AuthResponseDto mockResponse = createSuccessAuthResponse("Registration successful");
+        // Настройка моков
+        when(authService.register(requestDto)).thenReturn(mockResponse);
 
-        Map<String, Object> serviceResponse = Map.of(
-                "message", "Registration successful",
-                "user", new UserResponseDto()
-        );
-
-        AuthResponseDto expectedResponse = new AuthResponseDto();
-        expectedResponse.setRqid(1L);
-        expectedResponse.setRsid(123L);
-        expectedResponse.setStatusCode(HttpStatus.OK.value());
-        expectedResponse.setResponse(serviceResponse);
-        expectedResponse.setResponseTime(LocalDateTime.now());
-
-        // 2. Настройка моков
-        when(authService.register(any(RegistrationDto.class), anyLong()))
-                .thenReturn(serviceResponse);
-
-        when(integrationLogService.mapToAuthResponseDto(any(AuthRequestDto.class), anyMap()))
-                .thenReturn(expectedResponse);
-
-        // 3. Вызов тестируемого метода
+        // 2. Вызов
         ResponseEntity<AuthResponseDto> response = authController.register(requestDto);
 
-        // 4. Проверки
+        // 3. Проверки
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("Registration successful", response.getBody().getResponse().get("message"));
-        assertNotNull(response.getBody().getResponse().get("user"));
+        assertEquals(testRqid, response.getBody().getRqid());
+        assertEquals("Registration successful",
+                response.getBody().getResponse().get("message"));
 
-        // 5. Проверка вызовов зависимостей
-        verify(authService).register(any(RegistrationDto.class), eq(1L));
-        verify(integrationLogService).mapToAuthResponseDto(any(AuthRequestDto.class), anyMap());
-        verify(integrationLogService).logInteraction(any(AuthRequestDto.class), any(AuthResponseDto.class));
-        verify(requestContext).setRequestDto(any(AuthRequestDto.class));
-        verify(applicationLogRepository, atLeastOnce()).save(any(ApplicationLog.class));
+        verify(requestContext).setRqid(testRqid);
+        assertNull(MDC.get("rqid"));
     }
-
+    /**
+     * Проверяет успешный вход пользователя.
+     *
+     * <p>Тест проверяет:
+     * <ul>
+     *   <li>Корректность HTTP статуса ответа (200 OK)</li>
+     *   <li>Правильность заполнения контекста запроса</li>
+     *   <li>Содержимое успешного ответа</li>
+     * </ul>
+     */
     @Test
-    void login_ValidInput_ReturnsOk() {
-        // 1. Подготовка тестовых данных
-        AuthRequestDto requestDto = new AuthRequestDto();
-        requestDto.setRqid(1L);
-        requestDto.setLoginData(createValidLoginDto());
+    void login_ValidInput_ReturnsOk() throws JsonProcessingException {
+        // 1. Подготовка
+        LoginDto requestDto = createValidLoginDto();
+        AuthResponseDto mockResponse = createSuccessAuthResponse("Login successful");
+        // Настройка моков
+        when(authService.login(requestDto)).thenReturn(mockResponse);
 
-        Map<String, Object> serviceResponse = Map.of(
-                "message", "Login successful",
-                "user", new UserResponseDto()
-        );
-
-        AuthResponseDto expectedResponse = new AuthResponseDto();
-        expectedResponse.setRqid(1L);
-        expectedResponse.setRsid(123L);
-        expectedResponse.setStatusCode(HttpStatus.OK.value());
-        expectedResponse.setResponse(serviceResponse);
-        expectedResponse.setResponseTime(LocalDateTime.now());
-
-        // 2. Настройка моков
-        when(authService.login(any(LoginDto.class), anyLong()))
-                .thenReturn(serviceResponse);
-
-        when(integrationLogService.mapToAuthResponseDto(any(AuthRequestDto.class), anyMap()))
-                .thenReturn(expectedResponse);
-
-        // 3. Вызов тестируемого метода
+        // 2. Вызов
         ResponseEntity<AuthResponseDto> response = authController.login(requestDto);
 
-        // 4. Проверки
+        // 3. Проверки
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("Login successful", response.getBody().getResponse().get("message"));
-        assertNotNull(response.getBody().getResponse().get("user"));
 
-        // 5. Проверка вызовов зависимостей
-        verify(authService).login(any(LoginDto.class), eq(1L));
-        verify(integrationLogService).mapToAuthResponseDto(any(AuthRequestDto.class), anyMap());
-        verify(integrationLogService).logInteraction(any(AuthRequestDto.class), any(AuthResponseDto.class));
-        verify(requestContext).setRequestDto(any(AuthRequestDto.class));
-        verify(applicationLogRepository, atLeastOnce()).save(any(ApplicationLog.class));
+        assertEquals(testRqid, response.getBody().getRqid());
+        assertEquals("Login successful",
+                response.getBody().getResponse().get("message"));
+
+        verify(requestContext).setRqid(testRqid);
+        assertNull(MDC.get("rqid"));
     }
-
+    /**
+     * Проверяет обработку ошибок при регистрации.
+     *
+     */
     @Test
-    void register_NullRegistrationData_ThrowsException() {
-        AuthRequestDto requestDto = new AuthRequestDto();
-        requestDto.setRqid(1L);
-        requestDto.setRegistrationData(null);
+    void register_ServiceThrowsException_CleansContext() throws JsonProcessingException, MessagingException {
+        // 1. Подготовка
+        RegistrationDto requestDto = createValidRegistrationDto();
 
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+        // 2. Настройка моков для генерации ошибки
+        when(authService.register(requestDto))
+                .thenThrow(new RuntimeException("Service error"));
+
+        // 3. Проверка исключения
+        assertThrows(RuntimeException.class,
                 () -> authController.register(requestDto));
 
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        assertEquals("Registration data is empty", exception.getReason());
+        verify(requestContext).setRqid(testRqid);
+        assertNull(MDC.get("rqid"));
     }
 
-    @Test
-    void login_NullLoginData_ThrowsException() {
-        AuthRequestDto requestDto = new AuthRequestDto();
-        requestDto.setRqid(1L);
-        requestDto.setLoginData(null);
-
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
-                () -> authController.login(requestDto));
-
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        assertEquals("Login data is required", exception.getReason());
+    /**
+     * Создает успешный AuthResponseDto для тестирования.
+     *
+     * @param message сообщение для ответа
+     * @return подготовленный AuthResponseDto
+     */
+    private AuthResponseDto createSuccessAuthResponse(String message) {
+        AuthResponseDto response = new AuthResponseDto();
+        response.setRqid(testRqid);
+        response.setStatusCode(HttpStatus.OK.value());
+        response.setResponse(Map.of(
+                "message", message,
+                "user", new UserResponseDto(1L, testUsername, testEmail, LocalDateTime.now())
+        ));
+        return response;
     }
-
-    // Вспомогательные методы
+    /**
+     * Создает валидный RegistrationDto для тестирования.
+     *
+     * @return подготовленный RegistrationDto
+     */
     private RegistrationDto createValidRegistrationDto() {
         RegistrationDto dto = new RegistrationDto();
-        dto.setUsername("testuser");
-        dto.setEmail("test@example.com");
-        dto.setPassword("password123");
+        dto.setRqid(testRqid);
+        dto.setUsername(testUsername);
+        dto.setEmail(testEmail);
+        dto.setPassword("ValidPass123!");
         dto.setVerificationType("recaptcha");
         dto.setRecaptchaToken("valid-token");
         return dto;
     }
-
+    /**
+     * Создает валидный LoginDto для тестирования.
+     *
+     * @return подготовленный LoginDto
+     */
     private LoginDto createValidLoginDto() {
         LoginDto dto = new LoginDto();
-        dto.setUsernameOrEmail("testuser");
-        dto.setPassword("password123");
+        dto.setRqid(testRqid);
+        dto.setEmail(testEmail);
+        dto.setPassword("ValidPass123!");
         return dto;
     }
 }

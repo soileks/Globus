@@ -135,10 +135,13 @@ async function register() {
 
         // Подготовка данных для отправки
         const requestData = {
-            username: username,
-            email: email,
-            password: password,
-            ...verificationData
+            rqid: 123456789,
+            registrationData: {
+                username: username,
+                email: email,
+                password: password,
+                ...verificationData
+            }
         };
 
 
@@ -216,23 +219,27 @@ async function login() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                usernameOrEmail: username,
-                password: password
+                rqid: 123456789,
+                loginData: {
+                    usernameOrEmail: username,
+                    password: password
+                }
             })
         });
 
         const data = await response.json();
 
         if (!response.ok) {
+            alert(`Ошибка входа`)
             throw new Error(data.message || "Ошибка входа");
         }
 
         // Выводим информацию о пользователе
         const userInfo = `Вход выполнен успешно!\n\nДанные пользователя:\n` +
-            `ID: ${data.user.id}\n` +
-            `Логин: ${data.user.username}\n` +
-            `Email: ${data.user.email}\n` +
-            `Дата регистрации: ${new Date(data.user.createdAt).toLocaleString()}`;
+            `ID: ${data.response.user.id}\n` +
+            `Логин: ${data.response.user.username}\n` +
+            `Email: ${data.response.user.email}\n` +
+            `Дата регистрации: ${new Date(data.response.user.createdAt).toLocaleString()}`;
 
         alert(userInfo);
         clearLoginForm();

@@ -2,117 +2,146 @@ package com.bank.userservice.service;
 
 import com.bank.userservice.dto.RecaptchaResponseDto;
 import com.bank.userservice.dto.RegistrationDto;
-import com.bank.userservice.model.Log.ApplicationLog;
-import com.bank.userservice.repository.Log.ApplicationLogRepository;
-import lombok.AllArgsConstructor;
+import com.bank.userservice.exception.InvalidCaptchaException;
+import com.bank.userservice.repository.log.ApplicationLogRepository;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
+import static com.bank.userservice.model.log.enums.LogLevel.*;
+
+/**
+ * Сервис для проверки различных типов CAPTCHA.
+ *
+ * <p>Поддерживаемые типы CAPTCHA:
+ * <ul>
+ *   <li><b>reCAPTCHA</b> - проверка через Google API</li>
+ *   <li><b>Математическая CAPTCHA</b> - решение простых арифметических задач</li>
+ * </ul>
+ *
+ * <p>Сервис выполняет:
+ * <ul>
+ *   <li>Валидацию входных данных</li>
+ *   <li>Логирование всех этапов проверки</li>
+ *   <li>Интеграцию с внешними сервисами (Google reCAPTCHA)</li>
+ *   <li>Генерацию ошибок при неудачной проверке</li>
+ * </ul>
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 @Data
 public class CaptchaService {
+    // Секретный ключ для reCAPTCHA
     @Value("${recaptcha.secret-key}")
     private String secretKey;
-
+    // Клиент для HTTP-запросов к сервису reCAPTCHA
     private RestTemplate restTemplate = new RestTemplate();
-    private final  ApplicationLogRepository applicationLogRepository;
 
+    private final ApplicationLogRepository applicationLogRepository;
+    // URL API для проверки reCAPTCHA
     private static final String VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
+    // Поддерживаемые математические операции
     private static final List<String> SUPPORTED_MATH_OPS = List.of("+", "-", "*");
+    // Имя логгера (используется для записи в логи)
     private final String loggerName = this.getClass().getName();
+    private final ApplicationLogService applicationLogService;
 
-    public void verifyCaptcha(RegistrationDto dto, Long rqid) {
+    /**
+     * Проверяет CAPTCHA в зависимости от указанного типа верификации.
+     *
+     * <p>В зависимости от verificationType вызывает соответствующую проверку:
+     * <ul>
+     *   <li>"recaptcha" - проверка через Google reCAPTCHA API</li>
+     *   <li>"math" - проверка математической CAPTCHA</li>
+     * </ul>
+     *
+     * @param registrationDto DTO регистрации содержащее:
+     *           <ul>
+     *             <li>verificationType - тип CAPTCHA ("recaptcha" или "math")</li>
+     *             <li>recaptchaToken - токен для reCAPTCHA (если выбран этот тип)</li>
+     *             <li>mathToken - математическая задача (если выбран этот тип)</li>
+     *             <li>rqid - идентификатор запроса</li>
+     *           </ul>
+     * @throws InvalidCaptchaException если:
+     *           <ul>
+     *             <li>Указан неподдерживаемый тип верификации</li>
+     *             <li>Проверка CAPTCHA не пройдена</li>
+     *           </ul>
+     * @throws IllegalArgumentException если не указан обязательный параметр
+     *
+     * @see RegistrationDto
+     * @see InvalidCaptchaException
+     */
+    public void verifyCaptcha(RegistrationDto registrationDto) {
 
-        log.debug("Starting captcha verification for type: {}", dto.getVerificationType());
-        applicationLogRepository.save(new ApplicationLog(
-                "DEBUG",
-                "Starting captcha verification for type: " + dto.getVerificationType(),
+        String rqid = registrationDto.getRqid();
+        applicationLogService.log(INFO,
+                "Starting captcha verification for type: " + registrationDto.getVerificationType(),
                 rqid,
-                LocalDateTime.now(),
-                loggerName
-        ));
+                loggerName);
 
-        boolean verify;
-        switch (dto.getVerificationType()) {
-            case "recaptcha":
-                verify = verifyRecaptcha(dto.getRecaptchaToken(), rqid);
-                break;
-            case "math":
-                verify = verifyMathCaptcha(
-                        dto.getMathProblem(),
-                        dto.getMathAnswer(),
-                        rqid
-                );
-                break;
-            default:
-                log.warn("Unsupported verification type: {}", dto.getVerificationType());
-                applicationLogRepository.save(new ApplicationLog(
-                        "WARN",
-                        "Unsupported captcha type: " + dto.getVerificationType(),
+        boolean verify = switch (registrationDto.getVerificationType()) {
+            case "recaptcha" -> verifyRecaptcha(registrationDto.getRecaptchaToken(), rqid);
+            case "math" -> verifyMathCaptcha(registrationDto.getMathToken(), rqid);
+            default -> {
+                applicationLogService.log(WARN,
+                        "Unsupported captcha type: " + registrationDto.getVerificationType(),
                         rqid,
-                        LocalDateTime.now(),
-                        loggerName
-                ));
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Unsupported verification type"
-                );
-        }
+                        loggerName);
+                throw new InvalidCaptchaException("Unsupported verification type");
+
+            }
+        };
 
         if (!verify) {
-            log.error("Captcha verification failed for type: {}", dto.getVerificationType());
-            applicationLogRepository.save(new ApplicationLog(
-                    "ERROR",
-                    "Captcha verification failed for type: " + dto.getVerificationType(),
+            applicationLogService.log(ERROR,
+                    "Captcha verification failed for type: " + registrationDto.getVerificationType(),
                     rqid,
-                    LocalDateTime.now(),
-                    loggerName
-            ));
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Incorrect captcha"
-            );
-        }
+                    loggerName);
 
-        log.info("Captcha verification successful for type: {}", dto.getVerificationType());
-        applicationLogRepository.save(new ApplicationLog(
-                "INFO",
-                "Captcha verification successful for type: " + dto.getVerificationType(),
+            throw new InvalidCaptchaException("Incorrect captcha");
+        }
+        applicationLogService.log(INFO,
+                "Captcha verification successful for type: " + registrationDto.getVerificationType(),
                 rqid,
-                LocalDateTime.now(),
-                loggerName
-        ));
+                loggerName);
 
     }
 
-    public boolean verifyRecaptcha(String token, Long rqid) {
+    /**
+     * Проверяет токен reCAPTCHA через Google API.
+     *
+     * <p>Процесс проверки:
+     * <ol>
+     *   <li>Отправка POST-запроса к Google reCAPTCHA API</li>
+     *   <li>Проверка ответа на успешность</li>
+     *   <li>Логирование результата</li>
+     * </ol>
+     *
+     * @param token токен reCAPTCHA полученный от клиента
+     * @param rqid идентификатор запроса для логирования
+     * @return true если проверка пройдена успешно, false в противном случае
+     *
+     * @see RecaptchaResponseDto
+     */
+    public boolean verifyRecaptcha(String token, String rqid) {
+//        applicationLogService.log(DEBUG,
+//                "Verifying reCAPTCHA token",
+//                rqid,
+//                loggerName);
 
-        log.debug("Verifying reCAPTCHA token");
-        applicationLogRepository.save(new ApplicationLog(
-                "DEBUG",
-                "Verifying reCAPTCHA token",
-                rqid,
-                LocalDateTime.now(),
-                loggerName
-        ));
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("secret", secretKey);
-        params.add("response", token);
-
+        params.add("response", token); // Токен от клиента
+        // Отправка запроса к API reCAPTCHA
         RecaptchaResponseDto response = restTemplate.postForObject(
                 VERIFY_URL,
                 params,
@@ -122,105 +151,93 @@ public class CaptchaService {
         boolean success = response != null && response.isSuccess();
 
         if (!success) {
-            log.error("reCAPTCHA verification failed. Response: {}, ErrorCodes: {}",
-                    response, response != null ? response.getErrorCodes() : "null");
-            applicationLogRepository.save(new ApplicationLog(
-                    "ERROR",
+            applicationLogService.log(ERROR,
                     "reCAPTCHA verification failed",
                     rqid,
-                    LocalDateTime.now(),
-                    loggerName
-            ));
+                    loggerName);
+//            log.error("reCAPTCHA verification failed. Response: {}, ErrorCodes: {}",
+//                    response, response != null ? response.getErrorCodes() : "null");
         }
 
         return success;
     }
 
-    public boolean verifyMathCaptcha(String problem, String answer, Long rqid) {
+    /**
+     * Проверяет решение математической CAPTCHA.
+     *
+     * <p>Формат математической задачи:
+     * <pre>"число1 операция число2 = ответ"</pre>
+     *
+     * <p>Поддерживаемые операции:
+     * <ul>
+     *   <li>Сложение (+)</li>
+     *   <li>Вычитание (-)</li>
+     *   <li>Умножение (*)</li>
+     * </ul>
+     *
+     * @param mathToken строка с математической задачей в формате "a + b = c"
+     * @param rqid идентификатор запроса для логирования
+     * @return true если ответ верный, false в противном случае
+     * @throws InvalidCaptchaException если неверный формат строки с задачей
+     * @throws NumberFormatException если числа в задаче не являются целыми числами
+     * @throws IllegalArgumentException если mathToken некорректный
+     */
+    public boolean verifyMathCaptcha(String mathToken, String rqid) {
+//        applicationLogService.log( DEBUG,
+//                "Verifying math captcha. Problem: " + problem + ", Answer: " + answer,
+//                rqid,
+//                loggerName);
 
-        log.debug("Verifying math captcha. Problem: {}, Answer: {}", problem, answer);
-        applicationLogRepository.save(new ApplicationLog(
-                "DEBUG",
-                "Verifying math captcha. Problem: " + problem + ", Answer: " + answer,
-                rqid,
-                LocalDateTime.now(),
-                loggerName
-        ));
-        if (problem == null || answer == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Math problem and answer must be provided"
-            );
-        }
-
-        try {
-            int userAnswer = Integer.parseInt(answer.trim());
-            String[] parts = problem.trim().split("\\s+");
-
-            if (parts.length != 3) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Math problem must be in format 'num1 op num2'"
-                );
-            }
-
-            int num1 = Integer.parseInt(parts[0]);
-            int num2 = Integer.parseInt(parts[2]);
-            String op = parts[1];
-
-            log.debug("Math captcha operands: {} {}, operation: {}", num1, num2, op);
-
-            if (!SUPPORTED_MATH_OPS.contains(op)) {
-                log.error("Unsupported math operator: {}", op);
-                applicationLogRepository.save(new ApplicationLog(
-                        "ERROR",
-                        "Unsupported math operator: " + op,
-                        rqid,
-                        LocalDateTime.now(),
-                        loggerName
-                ));
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Unsupported math operator. Allowed: +, -, *"
-                );
-            }
-
-            int correctAnswer = switch (op) {
-                case "+" -> num1 + num2;
-                case "-" -> num1 - num2;
-                case "*" -> num1 * num2;
-                default -> throw new IllegalStateException("Unsupported operator");
-            };
-
-            boolean result = userAnswer == correctAnswer;
-
-            if (!result) {
-                log.error("Math captcha failed. Expected: {}, got: {}", correctAnswer, userAnswer);
-                applicationLogRepository.save(new ApplicationLog(
-                        "ERROR",
-                        "Math captcha failed. Expected: " + correctAnswer + ", got: " + userAnswer,
-                        rqid,
-                        LocalDateTime.now(),
-                        loggerName
-                ));
-            }
-
-            return result;
-
-        } catch (NumberFormatException e) {
-            log.error("Invalid math format. Problem: {}, Answer: {}", problem, answer);
-            applicationLogRepository.save(new ApplicationLog(
-                    "ERROR",
-                    "Invalid math format. Problem: " + problem + ", Answer: " + answer,
+        if (mathToken == null) {
+            applicationLogService.log(ERROR,
+                    "Math token must be provided",
                     rqid,
-                    LocalDateTime.now(),
-                    loggerName
-            ));
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Invalid math problem/answer format"
-            );
+                    loggerName);
+            throw new IllegalArgumentException("Math token must be provided");
         }
+        String[] parts = mathToken.trim().split("\\s+");
+
+        if (parts.length != 5) {
+            applicationLogService.log(ERROR,
+                    "Invalid math token format",
+                    rqid,
+                    loggerName);
+            throw new InvalidCaptchaException("Invalid math token format");
+        }
+
+        int userAnswer = Integer.parseInt(parts[4]);
+
+        int num1 = Integer.parseInt(parts[0]);
+        int num2 = Integer.parseInt(parts[2]);
+        String op = parts[1];
+
+
+        if (!SUPPORTED_MATH_OPS.contains(op)) {
+            applicationLogService.log(ERROR,
+                    "Unsupported math operator: " + op,
+                    rqid,
+                    loggerName);
+
+            throw new IllegalArgumentException("Unsupported math operator. Allowed: +, -, *");
+        }
+        int correctAnswer = switch (op) {
+            case "+" -> num1 + num2;
+            case "-" -> num1 - num2;
+            case "*" -> num1 * num2;
+            default -> throw new IllegalArgumentException("Unsupported math operator");
+        };
+
+        boolean result = userAnswer == correctAnswer;
+
+        if (!result) {
+            applicationLogService.log(ERROR,
+                    "Math captcha failed. Expected: " + correctAnswer + ", got: " + userAnswer,
+                    rqid,
+                    loggerName);
+        }
+
+        return result;
+
     }
 
 }
