@@ -5,3 +5,4 @@
 2. Ввод капчи при регистрации
 
 3. Информирование по email о входе
+<img width="694" height="611" alt="2025-08-15_22-47-11" src="https://github.com/user-attachments/assets/ab16b9de-d8d0-490e-bd9a-6b85c10146ca" />
